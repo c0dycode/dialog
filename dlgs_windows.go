@@ -51,12 +51,49 @@ func (d filedlg) Filename() string {
 	return string(utf16.Decode(d.buf[:i]))
 }
 
+func (d filedlg) Filenames() []string {
+	var fnames []string
+	var dir string
+	i := 0
+	nameStart := 0
+	if d.opf.FileExtension != 0{
+		fnames = append(fnames, d.Filename())
+		return fnames
+	}
+	for i < len(d.buf) {
+		if d.buf[i] == 0 && d.buf[i + 1 ] == 0{
+			fnames = append(fnames, dir + "\\" + string(utf16.Decode(d.buf[nameStart:i])))
+			break
+		}
+		if d.buf[i] == 0 && d.buf[i + 1] != 0{
+			if dir == ""{
+				dir = string(utf16.Decode(d.buf[nameStart:i]))
+				nameStart = i + 1
+				i++
+				continue
+			}
+			fnames = append(fnames, dir + "\\" + string(utf16.Decode(d.buf[nameStart:i])))
+			nameStart = i + 1
+		}
+		i++
+	}
+	return fnames
+}
+
 func (b *FileBuilder) load() (string, error) {
 	d := openfile(w32.OFN_FILEMUSTEXIST, b)
 	if w32.GetOpenFileName(d.opf) {
 		return d.Filename(), nil
 	}
 	return "", err()
+}
+
+func (b *FileBuilder) loadMulti() ([]string, error) {
+	d := openfile((w32.OFN_FILEMUSTEXIST | w32.OFN_ALLOWMULTISELECT | w32.OFN_EXPLORER), b)
+	if w32.GetOpenFileName(d.opf) {
+		return d.Filenames(), nil
+	}
+	return []string{}, err()
 }
 
 func (b *FileBuilder) save() (string, error) {
@@ -89,7 +126,7 @@ func utf16slice(ptr *uint16) []uint16 {
 }
 
 func openfile(flags uint32, b *FileBuilder) (d filedlg) {
-	d.buf = make([]uint16, w32.MAX_PATH)
+	d.buf = make([]uint16, 4096)
 	d.opf = &w32.OPENFILENAME{
 		File:    utf16ptr(d.buf),
 		MaxFile: uint32(len(d.buf)),
